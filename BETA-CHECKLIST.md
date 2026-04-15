@@ -152,3 +152,5 @@ Bu dokuman alpha surumden beta surume gecis icin teknik, urun, tasarim, animasyo
 - Oda owner rolu, kick-user ve mute-all moderasyon olaylari backend+frontend'e eklendi.
 - Discord benzeri oda ici chat paneli ve sistem bildirimleri eklendi.
 - Tema secici ve 3 adimli onboarding tour eklendi.
+- GitHub Actions release pipeline v1.1.0-beta.4 icin basariyla calisti ve update assetleri yayinlandi.
+- Updater owner/repo varsayilanlari Meslanaa/Mescord ile senkron hale getirildi.
