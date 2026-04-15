@@ -1,0 +1,24 @@
+{
+  "name": "mescord",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/web",
+    "apps/server",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @mescord/server\" \"npm run dev --workspace @mescord/web\"",
+    "dev:desktop": "concurrently \"npm run dev:desktop --workspace @mescord/server\" \"npm run dev:desktop --workspace @mescord/web\" \"npm run dev:desktop --workspace @mescord/desktop\"",
+    "dev:web": "npm run dev --workspace @mescord/web",
+    "dev:server": "npm run dev --workspace @mescord/server",
+    "dev:desktop:only": "npm run dev --workspace @mescord/desktop",
+    "build": "npm run build --workspace @mescord/web",
+    "build:desktop": "npm run build --workspace @mescord/web && npm run build --workspace @mescord/desktop",
+    "publish:desktop": "npm run build --workspace @mescord/web && npm run publish --workspace @mescord/desktop",
+    "start": "npm run start --workspace @mescord/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
