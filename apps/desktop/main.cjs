@@ -36,7 +36,7 @@ function getStartUrl() {
 }
 
 function getUpdateFeed() {
-  const owner = process.env.MESCORD_UPDATE_OWNER || "MeslaN";
+  const owner = process.env.MESCORD_UPDATE_OWNER || "Meslanaa";
   const repo = process.env.MESCORD_UPDATE_REPO || "Mescord";
 
   return {

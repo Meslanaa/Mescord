@@ -1,6 +1,6 @@
 {
   "name": "@mescord/desktop",
-  "version": "1.1.0-beta.3",
+  "version": "1.1.0-beta.4",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -41,7 +41,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "MeslaN",
+        "owner": "Meslanaa",
         "repo": "Mescord",
         "releaseType": "release"
       }
