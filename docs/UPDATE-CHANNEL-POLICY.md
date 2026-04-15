@@ -1,13 +1,27 @@
 # Update Channel Policy
 
-This public repository is updates-only.
+Bu depo public oldugunda sadece update dagitimi icin kullanilir.
 
-Rules:
-1. Never publish application source code to main.
-2. Publish only updater artifacts for each release version.
-3. Keep release assets compatible with electron-updater (latest.yml + setup exe + blockmap).
+## Zorunlu Kurallar
+1. Uygulama kaynak kodu public depoya asla push edilmez.
+2. Public depoda sadece update dagitimi ile ilgili dosyalar ve dokumanlar bulunur.
+3. Her release surumunde sadece electron-updater ile uyumlu artifactler yayinlanir:
+	- latest.yml
+	- Mescord-Setup-<version>.exe
+	- Mescord-Setup-<version>.exe.blockmap
 
-Release process reminder:
-1. Build from private source code.
-2. Publish binaries and latest.yml to GitHub Releases.
-3. Verify latest.yml version matches the installer version.
+## Release Isletim Plani
+1. Build her zaman private kaynak koddan alinır.
+2. Public depoda source yerine sadece release asset yayinlanir.
+3. Release sonrasi latest.yml icindeki version degeri, setup exe surumu ile birebir ayni olmali.
+4. Yayin tamamlaninca release sayfasinda en son tag tek "latest" dagitim kaynagi olarak kullanilir.
+
+## Updater Davranis Politikasi (Windows)
+1. NSIS one-click + per-user kurulum kullanilir.
+2. Sessiz kurulum icin allowElevation kapali tutulur.
+3. Update indirildikten sonra uygulama sessiz kurulumla arka planda guncellenir ve tekrar acilir.
+4. Hedef: kullanicinin her guncellemede setup sihirbazi gormemesi.
+5. Daha once "tum kullanicilar" olarak kurulmus eski surumlerde, UAC'yi kalici kaldirmak icin bir kez "sadece benim icin" kurulumuna gecis gerekebilir.
+
+## Unutma Notu
+Bu projede bundan sonra update modeli sabittir: source public degil, dagitim sadece release artifactleri ile yapilir.
