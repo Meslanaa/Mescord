@@ -773,6 +773,8 @@ export default function App() {
             setQuickTunnelBusy(false);
 
             if (nextState.status === "ready" && nextState.publicUrl) {
+              setConnectionApiInput(nextState.publicUrl);
+              setConnectionSignalingInput(nextState.publicUrl);
               setConnectionNotice(
                 `Cloudflare URL hazir: ${nextState.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
               );
@@ -792,6 +794,68 @@ export default function App() {
       }
     };
   }, [isDesktop]);
+
+  useEffect(() => {
+    if (!isDesktop) {
+      return undefined;
+    }
+
+    if (quickTunnelState.status !== "starting" && quickTunnelState.status !== "stopping") {
+      return undefined;
+    }
+
+    const desktopApi = window.mescordDesktop;
+    if (!desktopApi || typeof desktopApi.getQuickTunnelStatus !== "function") {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const pollStatus = async () => {
+      try {
+        const result = await desktopApi.getQuickTunnelStatus();
+        if (disposed || !result?.state) {
+          return;
+        }
+
+        const nextState = result.state;
+        setQuickTunnelState((prev) => ({
+          ...prev,
+          ...nextState,
+        }));
+
+        if (nextState.status !== "starting" && nextState.status !== "stopping") {
+          setQuickTunnelBusy(false);
+        }
+
+        if (nextState.status === "ready" && nextState.publicUrl) {
+          setConnectionApiInput(nextState.publicUrl);
+          setConnectionSignalingInput(nextState.publicUrl);
+          setConnectionNotice(
+            `Cloudflare URL hazir: ${nextState.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
+          );
+          return;
+        }
+
+        if (nextState.status === "error" && nextState.error) {
+          setConnectionNotice(nextState.error);
+        }
+      } catch {
+        // Ignore polling errors and keep waiting for next tick.
+      }
+    };
+
+    const timerId = window.setInterval(() => {
+      pollStatus();
+    }, 1200);
+
+    pollStatus();
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timerId);
+    };
+  }, [isDesktop, quickTunnelState.status]);
 
   useEffect(() => {
     if (joined && authToken) {
@@ -1229,6 +1293,8 @@ export default function App() {
       }
 
       if (result?.state?.publicUrl) {
+        setConnectionApiInput(result.state.publicUrl);
+        setConnectionSignalingInput(result.state.publicUrl);
         setConnectionNotice(
           `Cloudflare URL hazir: ${result.state.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
         );

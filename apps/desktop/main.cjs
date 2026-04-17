@@ -1,7 +1,6 @@
 const path = require("node:path");
 const os = require("node:os");
 const { spawn } = require("node:child_process");
-const readline = require("node:readline");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const log = require("electron-log");
 const { autoUpdater } = require("electron-updater");
@@ -19,11 +18,10 @@ let updateReadyInfo = null;
 let updateDownloadInProgress = false;
 let manualReleaseInfo = null;
 let quickTunnelProcess = null;
-let quickTunnelStdoutReader = null;
-let quickTunnelStderrReader = null;
+let quickTunnelStreamCleanups = [];
 let quickTunnelStopRequested = false;
 
-const QUICK_TUNNEL_URL_REGEX = /https:\/\/[a-z0-9-]+\.trycloudflare\.com(?:\/[^\s]*)?/i;
+const QUICK_TUNNEL_URL_REGEX = /https:\/\/[a-z0-9-]+\.(?:trycloudflare\.com|cfargotunnel\.com)(?:\/[^\s"']*)?/i;
 
 function sendToRenderer(channel, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -362,16 +360,16 @@ function extractQuickTunnelUrl(text) {
   return normalizeUrl(match[0]);
 }
 
-function closeQuickTunnelReaders() {
-  if (quickTunnelStdoutReader) {
-    quickTunnelStdoutReader.close();
-    quickTunnelStdoutReader = null;
-  }
+function closeQuickTunnelStreams() {
+  quickTunnelStreamCleanups.forEach((cleanup) => {
+    try {
+      cleanup();
+    } catch {
+      // Ignore cleanup races.
+    }
+  });
 
-  if (quickTunnelStderrReader) {
-    quickTunnelStderrReader.close();
-    quickTunnelStderrReader = null;
-  }
+  quickTunnelStreamCleanups = [];
 }
 
 function handleQuickTunnelOutputLine(line) {
@@ -397,17 +395,223 @@ function handleQuickTunnelOutputLine(line) {
   });
 }
 
-function attachQuickTunnelReader(stream) {
-  if (!stream) {
-    return null;
+function handleQuickTunnelOutputChunk(chunk) {
+  const text = typeof chunk === "string" ? chunk : "";
+  if (!text.trim()) {
+    return;
   }
 
-  const reader = readline.createInterface({ input: stream });
-  reader.on("line", (line) => {
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line) => {
     handleQuickTunnelOutputLine(line);
   });
+}
 
-  return reader;
+function attachQuickTunnelStream(stream) {
+  if (!stream || typeof stream.on !== "function") {
+    return () => {};
+  }
+
+  const onData = (chunk) => {
+    handleQuickTunnelOutputChunk(String(chunk || ""));
+  };
+
+  stream.on("data", onData);
+
+  return () => {
+    if (typeof stream.off === "function") {
+      stream.off("data", onData);
+      return;
+    }
+
+    if (typeof stream.removeListener === "function") {
+      stream.removeListener("data", onData);
+    }
+  };
+}
+
+function ensureCloudflaredAvailable(command) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child = null;
+
+    const finish = (payload) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(payload);
+    };
+
+    try {
+      child = spawn(command, ["--version"], {
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      finish({
+        ok: false,
+        reason: "version-check-spawn-failed",
+        message: error?.message || "cloudflared calistirilamadi.",
+      });
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+        // Ignore kill race.
+      }
+
+      finish({
+        ok: false,
+        reason: "version-check-timeout",
+        message: "cloudflared surum kontrolu zaman asimina ugradi.",
+      });
+    }, 5000);
+
+    child.once("error", (error) => {
+      clearTimeout(timeoutId);
+
+      const missingBinary = error?.code === "ENOENT";
+      finish({
+        ok: false,
+        reason: missingBinary ? "cloudflared-missing" : "version-check-error",
+        message: missingBinary
+          ? "cloudflared bulunamadi. Kurulum: winget install Cloudflare.cloudflared"
+          : error?.message || "cloudflared calistirilamadi.",
+      });
+    });
+
+    child.once("exit", (code) => {
+      clearTimeout(timeoutId);
+      if (code === 0) {
+        finish({ ok: true });
+        return;
+      }
+
+      finish({
+        ok: false,
+        reason: "version-check-failed",
+        message: `cloudflared calistirilamadi (exit code ${code ?? "unknown"}).`,
+      });
+    });
+  });
+}
+
+async function probeQuickTunnelTarget(targetUrl) {
+  const normalizedTarget = normalizeUrl(targetUrl);
+  if (!normalizedTarget) {
+    return {
+      ok: false,
+      reason: "invalid-target-url",
+      message: "Quick Tunnel hedef URL gecersiz.",
+    };
+  }
+
+  const candidates = [`${normalizedTarget}/health`, normalizedTarget];
+  let lastError = null;
+
+  for (const candidate of candidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 4500);
+
+    try {
+      await fetch(candidate, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      return {
+        ok: true,
+        candidate,
+      };
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  let targetPort = "3001";
+  try {
+    targetPort = new URL(normalizedTarget).port || "3001";
+  } catch {
+    targetPort = "3001";
+  }
+
+  return {
+    ok: false,
+    reason: "target-unreachable",
+    message: `Hedef server ulasilamiyor: ${normalizedTarget}. Host PC'de serverin acik oldugundan emin ol (port ${targetPort}).`,
+    error: lastError?.message || "",
+  };
+}
+
+function waitForQuickTunnelReady(timeoutMs = 18000) {
+  if (quickTunnelState.status === "ready" && quickTunnelState.publicUrl) {
+    return Promise.resolve({
+      ok: true,
+      state: quickTunnelState,
+    });
+  }
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+
+    const timerId = setInterval(() => {
+      if (quickTunnelState.status === "ready" && quickTunnelState.publicUrl) {
+        clearInterval(timerId);
+        resolve({ ok: true, state: quickTunnelState });
+        return;
+      }
+
+      if (quickTunnelState.status === "error") {
+        clearInterval(timerId);
+        resolve({
+          ok: false,
+          reason: "runtime-error",
+          message: quickTunnelState.error || quickTunnelState.message || "Quick Tunnel basarisiz oldu.",
+          state: quickTunnelState,
+        });
+        return;
+      }
+
+      if (!quickTunnelProcess) {
+        clearInterval(timerId);
+        resolve({
+          ok: false,
+          reason: "process-exited",
+          message: quickTunnelState.error || "Quick Tunnel sureci sonlandi.",
+          state: quickTunnelState,
+        });
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        clearInterval(timerId);
+        resolve({
+          ok: false,
+          reason: "ready-timeout",
+          message: "Quick Tunnel URL belirlenen surede alinamadi.",
+          state: quickTunnelState,
+        });
+      }
+    }, 220);
+  });
+}
+
+function resolveQuickTunnelReadyTimeoutMs() {
+  const raw = Number(process.env.MESCORD_QUICK_TUNNEL_READY_TIMEOUT_MS || 18000);
+  if (Number.isFinite(raw) && raw >= 5000) {
+    return raw;
+  }
+
+  return 18000;
 }
 
 async function startQuickTunnel(preferredUrl = "") {
@@ -440,7 +644,45 @@ async function startQuickTunnel(preferredUrl = "") {
   const command = String(process.env.MESCORD_CLOUDFLARED_BIN || "cloudflared").trim() || "cloudflared";
   const args = ["tunnel", "--url", targetUrl, "--no-autoupdate"];
 
+  const binaryCheck = await ensureCloudflaredAvailable(command);
+  if (!binaryCheck.ok) {
+    const message =
+      binaryCheck.message || "cloudflared kullanilamiyor. Kurulum: winget install Cloudflare.cloudflared";
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: binaryCheck.reason || "cloudflared-unavailable",
+      message,
+      state: quickTunnelState,
+    };
+  }
+
+  const targetProbe = await probeQuickTunnelTarget(targetUrl);
+  if (!targetProbe.ok) {
+    const message = targetProbe.message || "Quick Tunnel hedefi ulasilamiyor.";
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: targetProbe.reason || "target-unreachable",
+      message,
+      state: quickTunnelState,
+    };
+  }
+
   try {
+    closeQuickTunnelStreams();
     quickTunnelProcess = spawn(command, args, {
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -472,12 +714,14 @@ async function startQuickTunnel(preferredUrl = "") {
     }),
   );
 
-  quickTunnelStdoutReader = attachQuickTunnelReader(quickTunnelProcess.stdout);
-  quickTunnelStderrReader = attachQuickTunnelReader(quickTunnelProcess.stderr);
+  quickTunnelStreamCleanups = [
+    attachQuickTunnelStream(quickTunnelProcess.stdout),
+    attachQuickTunnelStream(quickTunnelProcess.stderr),
+  ];
 
   quickTunnelProcess.once("error", (error) => {
     log.error("Quick Tunnel process error", error);
-    closeQuickTunnelReaders();
+    closeQuickTunnelStreams();
     quickTunnelProcess = null;
 
     const missingBinary = error?.code === "ENOENT";
@@ -494,7 +738,7 @@ async function startQuickTunnel(preferredUrl = "") {
   });
 
   quickTunnelProcess.once("exit", (code, signal) => {
-    closeQuickTunnelReaders();
+    closeQuickTunnelStreams();
     quickTunnelProcess = null;
 
     const stoppedByUser = quickTunnelStopRequested;
@@ -523,6 +767,32 @@ async function startQuickTunnel(preferredUrl = "") {
       error: message,
     });
   });
+
+  const readyResult = await waitForQuickTunnelReady(resolveQuickTunnelReadyTimeoutMs());
+  if (!readyResult.ok) {
+    if (quickTunnelProcess) {
+      try {
+        quickTunnelProcess.kill();
+      } catch {
+        // Ignore shutdown race.
+      }
+    }
+
+    const message = readyResult.message || "Quick Tunnel URL alinamadi.";
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: readyResult.reason || "ready-timeout",
+      message,
+      state: quickTunnelState,
+    };
+  }
 
   return {
     ok: true,
