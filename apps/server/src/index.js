@@ -10,12 +10,33 @@ const PORT = Number(process.env.PORT || 3001);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173,http://localhost:5174";
 
 function createAllowedOrigins(rawValue) {
-  return new Set(
-    String(rawValue || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean),
-  );
+  const exact = new Set();
+  const wildcard = [];
+
+  String(rawValue || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      if (item === "*") {
+        exact.add(item);
+        return;
+      }
+
+      if (item.includes("*")) {
+        const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const pattern = `^${escaped.replace(/\\\*/g, ".*")}$`;
+        wildcard.push(new RegExp(pattern, "i"));
+        return;
+      }
+
+      exact.add(item);
+    });
+
+  return {
+    exact,
+    wildcard,
+  };
 }
 
 const allowedOrigins = createAllowedOrigins(CLIENT_ORIGIN);
@@ -26,11 +47,15 @@ function isOriginAllowed(origin) {
     return true;
   }
 
-  if (allowedOrigins.has("*")) {
+  if (allowedOrigins.exact.has("*")) {
     return true;
   }
 
-  return allowedOrigins.has(origin);
+  if (allowedOrigins.exact.has(origin)) {
+    return true;
+  }
+
+  return allowedOrigins.wildcard.some((regex) => regex.test(origin));
 }
 
 const corsOptions = {

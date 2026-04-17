@@ -1,5 +1,7 @@
 const path = require("node:path");
 const os = require("node:os");
+const { spawn } = require("node:child_process");
+const readline = require("node:readline");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const log = require("electron-log");
 const { autoUpdater } = require("electron-updater");
@@ -16,6 +18,12 @@ let updateAvailableInfo = null;
 let updateReadyInfo = null;
 let updateDownloadInProgress = false;
 let manualReleaseInfo = null;
+let quickTunnelProcess = null;
+let quickTunnelStdoutReader = null;
+let quickTunnelStderrReader = null;
+let quickTunnelStopRequested = false;
+
+const QUICK_TUNNEL_URL_REGEX = /https:\/\/[a-z0-9-]+\.trycloudflare\.com(?:\/[^\s]*)?/i;
 
 function sendToRenderer(channel, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -23,6 +31,10 @@ function sendToRenderer(channel, payload) {
   }
 
   mainWindow.webContents.send(channel, payload);
+}
+
+function sendConnectionEvent(payload) {
+  sendToRenderer("connection:event", payload);
 }
 
 function triggerSilentInstall() {
@@ -273,6 +285,298 @@ function buildConnectionPresets() {
 
 const connectionPresets = buildConnectionPresets();
 
+function createQuickTunnelState(overrides = {}) {
+  return {
+    status: "idle",
+    publicUrl: "",
+    targetUrl: connectionPresets.localhostUrl,
+    startedAt: 0,
+    message: "",
+    error: "",
+    ...overrides,
+  };
+}
+
+let quickTunnelState = createQuickTunnelState();
+
+function setQuickTunnelState(next = {}) {
+  quickTunnelState = {
+    ...quickTunnelState,
+    ...next,
+  };
+
+  sendConnectionEvent({
+    type: "quick-tunnel-status",
+    state: quickTunnelState,
+  });
+}
+
+function buildConnectionPayload() {
+  return {
+    ...runtimeConnectionConfig,
+    connectionPresets: {
+      ...connectionPresets,
+      cloudflareUrl: quickTunnelState.publicUrl,
+      quickTunnelStatus: quickTunnelState.status,
+    },
+    suggestedServerPort: connectionPresets.serverPort,
+    suggestedLocalhostUrl: connectionPresets.localhostUrl,
+    suggestedLanIp: connectionPresets.lanIp,
+    suggestedLanUrl: connectionPresets.lanUrl,
+    suggestedCloudflareUrl: quickTunnelState.publicUrl,
+    quickTunnel: quickTunnelState,
+  };
+}
+
+function resolveQuickTunnelTargetUrl(preferredUrl = "") {
+  const preferred = normalizeUrl(preferredUrl || "");
+  if (preferred) {
+    return preferred;
+  }
+
+  const override = normalizeUrl(process.env.MESCORD_QUICK_TUNNEL_TARGET_URL || "");
+  if (override) {
+    return override;
+  }
+
+  const runtimeTarget = normalizeUrl(
+    runtimeConnectionConfig.apiBaseUrl || runtimeConnectionConfig.signalingUrl || "",
+  );
+  if (runtimeTarget) {
+    return runtimeTarget;
+  }
+
+  return connectionPresets.localhostUrl;
+}
+
+function extractQuickTunnelUrl(text) {
+  if (typeof text !== "string") {
+    return "";
+  }
+
+  const match = QUICK_TUNNEL_URL_REGEX.exec(text);
+  if (!match || !match[0]) {
+    return "";
+  }
+
+  return normalizeUrl(match[0]);
+}
+
+function closeQuickTunnelReaders() {
+  if (quickTunnelStdoutReader) {
+    quickTunnelStdoutReader.close();
+    quickTunnelStdoutReader = null;
+  }
+
+  if (quickTunnelStderrReader) {
+    quickTunnelStderrReader.close();
+    quickTunnelStderrReader = null;
+  }
+}
+
+function handleQuickTunnelOutputLine(line) {
+  if (typeof line !== "string" || !line.trim()) {
+    return;
+  }
+
+  log.info(`[quick-tunnel] ${line}`);
+  const discoveredUrl = extractQuickTunnelUrl(line);
+  if (!discoveredUrl) {
+    return;
+  }
+
+  if (quickTunnelState.status === "ready" && quickTunnelState.publicUrl === discoveredUrl) {
+    return;
+  }
+
+  setQuickTunnelState({
+    status: "ready",
+    publicUrl: discoveredUrl,
+    message: `Quick Tunnel hazir: ${discoveredUrl}`,
+    error: "",
+  });
+}
+
+function attachQuickTunnelReader(stream) {
+  if (!stream) {
+    return null;
+  }
+
+  const reader = readline.createInterface({ input: stream });
+  reader.on("line", (line) => {
+    handleQuickTunnelOutputLine(line);
+  });
+
+  return reader;
+}
+
+async function startQuickTunnel(preferredUrl = "") {
+  if (quickTunnelProcess) {
+    return {
+      ok: true,
+      state: quickTunnelState,
+      alreadyRunning: true,
+    };
+  }
+
+  const targetUrl = resolveQuickTunnelTargetUrl(preferredUrl);
+  if (!targetUrl) {
+    const message = "Quick Tunnel hedef URL bulunamadi.";
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: "missing-target-url",
+      message,
+      state: quickTunnelState,
+    };
+  }
+
+  const command = String(process.env.MESCORD_CLOUDFLARED_BIN || "cloudflared").trim() || "cloudflared";
+  const args = ["tunnel", "--url", targetUrl, "--no-autoupdate"];
+
+  try {
+    quickTunnelProcess = spawn(command, args, {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const message = error?.message || "Quick Tunnel baslatilamadi.";
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: "spawn-failed",
+      message,
+      state: quickTunnelState,
+    };
+  }
+
+  quickTunnelStopRequested = false;
+  setQuickTunnelState(
+    createQuickTunnelState({
+      status: "starting",
+      targetUrl,
+      startedAt: Date.now(),
+      message: `Quick Tunnel baslatiliyor (${targetUrl})`,
+    }),
+  );
+
+  quickTunnelStdoutReader = attachQuickTunnelReader(quickTunnelProcess.stdout);
+  quickTunnelStderrReader = attachQuickTunnelReader(quickTunnelProcess.stderr);
+
+  quickTunnelProcess.once("error", (error) => {
+    log.error("Quick Tunnel process error", error);
+    closeQuickTunnelReaders();
+    quickTunnelProcess = null;
+
+    const missingBinary = error?.code === "ENOENT";
+    const message = missingBinary
+      ? "cloudflared bulunamadi. Kurulum: winget install Cloudflare.cloudflared"
+      : error?.message || "Quick Tunnel baslatma hatasi";
+
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+  });
+
+  quickTunnelProcess.once("exit", (code, signal) => {
+    closeQuickTunnelReaders();
+    quickTunnelProcess = null;
+
+    const stoppedByUser = quickTunnelStopRequested;
+    quickTunnelStopRequested = false;
+
+    if (stoppedByUser) {
+      setQuickTunnelState(
+        createQuickTunnelState({
+          status: "idle",
+          message: "Quick Tunnel durduruldu.",
+        }),
+      );
+      return;
+    }
+
+    if (quickTunnelState.status === "error") {
+      return;
+    }
+
+    const reason = signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`;
+    const message = `Quick Tunnel kapandi (${reason}).`;
+    setQuickTunnelState({
+      status: "error",
+      publicUrl: "",
+      message,
+      error: message,
+    });
+  });
+
+  return {
+    ok: true,
+    state: quickTunnelState,
+  };
+}
+
+async function stopQuickTunnel() {
+  if (!quickTunnelProcess) {
+    setQuickTunnelState(
+      createQuickTunnelState({
+        status: "idle",
+        message: "Quick Tunnel zaten kapali.",
+      }),
+    );
+
+    return {
+      ok: true,
+      state: quickTunnelState,
+      alreadyStopped: true,
+    };
+  }
+
+  try {
+    quickTunnelStopRequested = true;
+    setQuickTunnelState({
+      status: "stopping",
+      message: "Quick Tunnel durduruluyor...",
+      error: "",
+    });
+    quickTunnelProcess.kill();
+  } catch (error) {
+    quickTunnelStopRequested = false;
+    const message = error?.message || "Quick Tunnel durdurulamadi.";
+    setQuickTunnelState({
+      status: "error",
+      message,
+      error: message,
+    });
+
+    return {
+      ok: false,
+      reason: "stop-failed",
+      message,
+      state: quickTunnelState,
+    };
+  }
+
+  return {
+    ok: true,
+    state: quickTunnelState,
+  };
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1540,
@@ -469,22 +773,24 @@ function setupIpc() {
     isPackaged: app.isPackaged,
     platform: process.platform,
     installDirectory: path.dirname(app.getPath("exe")),
-    ...runtimeConnectionConfig,
-    connectionPresets,
-    suggestedServerPort: connectionPresets.serverPort,
-    suggestedLocalhostUrl: connectionPresets.localhostUrl,
-    suggestedLanIp: connectionPresets.lanIp,
-    suggestedLanUrl: connectionPresets.lanUrl,
+    ...buildConnectionPayload(),
   }));
 
   ipcMain.handle("desktop:connection-config", () => ({
-    ...runtimeConnectionConfig,
-    connectionPresets,
-    suggestedServerPort: connectionPresets.serverPort,
-    suggestedLocalhostUrl: connectionPresets.localhostUrl,
-    suggestedLanIp: connectionPresets.lanIp,
-    suggestedLanUrl: connectionPresets.lanUrl,
+    ...buildConnectionPayload(),
   }));
+
+  ipcMain.handle("desktop:get-quick-tunnel-status", async () => ({
+    ok: true,
+    state: quickTunnelState,
+  }));
+
+  ipcMain.handle("desktop:start-quick-tunnel", async (_event, payload = {}) => {
+    const preferredUrl = typeof payload?.targetUrl === "string" ? payload.targetUrl : "";
+    return startQuickTunnel(preferredUrl);
+  });
+
+  ipcMain.handle("desktop:stop-quick-tunnel", async () => stopQuickTunnel());
 
   ipcMain.handle("desktop:check-updates", async () => checkForUpdates());
 
@@ -518,6 +824,10 @@ app.whenReady().then(() => {
     checkForUpdates();
   }
 
+  if (process.env.MESCORD_AUTO_QUICK_TUNNEL === "1") {
+    startQuickTunnel();
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -527,6 +837,15 @@ app.whenReady().then(() => {
 
 app.on("before-quit", () => {
   updateDownloadInProgress = false;
+
+  if (quickTunnelProcess) {
+    quickTunnelStopRequested = true;
+    try {
+      quickTunnelProcess.kill();
+    } catch {
+      // Ignore shutdown race if process already exited.
+    }
+  }
 });
 
 app.on("window-all-closed", () => {

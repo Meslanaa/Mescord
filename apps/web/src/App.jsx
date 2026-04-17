@@ -191,6 +191,16 @@ function initialsLabel(value) {
   }
 
   const chunks = source.split(/\s+/).slice(0, 2);
+
+  function createDefaultQuickTunnelState() {
+    return {
+      status: "idle",
+      publicUrl: "",
+      targetUrl: "",
+      message: "",
+      error: "",
+    };
+  }
   return chunks.map((chunk) => chunk[0]?.toUpperCase() || "").join("") || "MS";
 }
 
@@ -222,6 +232,8 @@ export default function App() {
   const [connectionApiInput, setConnectionApiInput] = useState("");
   const [connectionSignalingInput, setConnectionSignalingInput] = useState("");
   const [connectionNotice, setConnectionNotice] = useState("");
+  const [quickTunnelState, setQuickTunnelState] = useState(() => createDefaultQuickTunnelState());
+  const [quickTunnelBusy, setQuickTunnelBusy] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [selectedChannelId, setSelectedChannelId] = useState("");
   const [channelSearchInput, setChannelSearchInput] = useState("");
@@ -319,6 +331,31 @@ export default function App() {
   } = useAccountHub();
 
   const joined = Boolean(activeRoomId && isConnected);
+  const quickTunnelRunning =
+    quickTunnelState.status === "starting" ||
+    quickTunnelState.status === "ready" ||
+    quickTunnelState.status === "stopping";
+
+  const quickTunnelStatusLabel = useMemo(() => {
+    if (quickTunnelState.status === "ready") {
+      return "Hazir";
+    }
+
+    if (quickTunnelState.status === "starting") {
+      return "Baslatiliyor";
+    }
+
+    if (quickTunnelState.status === "stopping") {
+      return "Durduruluyor";
+    }
+
+    if (quickTunnelState.status === "error") {
+      return "Hata";
+    }
+
+    return "Kapali";
+  }, [quickTunnelState.status]);
+
   const selfParticipant = participants.find((participant) => participant.isSelf);
   const selfParticipantName = selfParticipant?.name || "";
   const isOwner = Boolean(selfParticipant && ownerId && selfParticipant.id === ownerId);
@@ -680,6 +717,81 @@ export default function App() {
   useEffect(() => {
     setConnectionSignalingInput(signalingUrl || "");
   }, [signalingUrl]);
+
+  useEffect(() => {
+    const appQuickTunnel = appInfo?.quickTunnel;
+    if (!appQuickTunnel || typeof appQuickTunnel !== "object") {
+      return;
+    }
+
+    setQuickTunnelState((prev) => ({
+      ...prev,
+      ...appQuickTunnel,
+    }));
+  }, [appInfo]);
+
+  useEffect(() => {
+    if (!isDesktop) {
+      return undefined;
+    }
+
+    const desktopApi = window.mescordDesktop;
+    if (!desktopApi || typeof desktopApi !== "object") {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    if (typeof desktopApi.getQuickTunnelStatus === "function") {
+      desktopApi
+        .getQuickTunnelStatus()
+        .then((result) => {
+          if (!disposed && result?.state) {
+            setQuickTunnelState((prev) => ({
+              ...prev,
+              ...result.state,
+            }));
+          }
+        })
+        .catch(() => {
+          // ignore initial tunnel status read errors
+        });
+    }
+
+    const unsubscribe =
+      typeof desktopApi.onConnectionEvent === "function"
+        ? desktopApi.onConnectionEvent((eventPayload) => {
+            if (!eventPayload || eventPayload.type !== "quick-tunnel-status") {
+              return;
+            }
+
+            const nextState = eventPayload.state || {};
+            setQuickTunnelState((prev) => ({
+              ...prev,
+              ...nextState,
+            }));
+            setQuickTunnelBusy(false);
+
+            if (nextState.status === "ready" && nextState.publicUrl) {
+              setConnectionNotice(
+                `Cloudflare URL hazir: ${nextState.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
+              );
+              return;
+            }
+
+            if (nextState.status === "error" && nextState.error) {
+              setConnectionNotice(nextState.error);
+            }
+          })
+        : null;
+
+    return () => {
+      disposed = true;
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, [isDesktop]);
 
   useEffect(() => {
     if (joined && authToken) {
@@ -1050,6 +1162,83 @@ export default function App() {
       setConnectionNotice(
         `Bu PC (LAN) secildi: ${target}. Arkadasin da ayni URL'yi kullanarak baglanabilir.`,
       );
+      return;
+    }
+
+    if (preset === "cloudflare") {
+      const target = quickTunnelState.publicUrl || appInfo?.suggestedCloudflareUrl || "";
+      if (!target) {
+        setConnectionNotice("Cloudflare URL henuz hazir degil. Once Quick Tunnel Baslat.");
+        return;
+      }
+
+      setConnectionApiInput(target);
+      setConnectionSignalingInput(target);
+      setConnectionNotice(
+        `Cloudflare URL secildi: ${target}. Arkadasin farkli internetten bu URL ile baglanabilir.`,
+      );
+    }
+  };
+
+  const handleQuickTunnelToggle = async () => {
+    if (!isDesktop) {
+      return;
+    }
+
+    const desktopApi = window.mescordDesktop;
+    if (!desktopApi || typeof desktopApi !== "object") {
+      setConnectionNotice("Desktop API bulunamadi.");
+      return;
+    }
+
+    const canStart = typeof desktopApi.startQuickTunnel === "function";
+    const canStop = typeof desktopApi.stopQuickTunnel === "function";
+    if (!canStart || !canStop) {
+      setConnectionNotice("Bu surumde Quick Tunnel destegi yok.");
+      return;
+    }
+
+    const shouldStop = quickTunnelRunning;
+    const preferredTargetUrl =
+      connectionApiInput.trim() ||
+      connectionSignalingInput.trim() ||
+      appInfo?.suggestedLocalhostUrl ||
+      "";
+    setQuickTunnelBusy(true);
+
+    try {
+      const result = shouldStop
+        ? await desktopApi.stopQuickTunnel()
+        : await desktopApi.startQuickTunnel({ targetUrl: preferredTargetUrl });
+
+      if (result?.state) {
+        setQuickTunnelState((prev) => ({
+          ...prev,
+          ...result.state,
+        }));
+      }
+
+      if (!result?.ok) {
+        setConnectionNotice(result?.message || "Quick Tunnel islemi basarisiz.");
+        return;
+      }
+
+      if (shouldStop) {
+        setConnectionNotice("Cloudflare Quick Tunnel durduruluyor.");
+        return;
+      }
+
+      if (result?.state?.publicUrl) {
+        setConnectionNotice(
+          `Cloudflare URL hazir: ${result.state.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
+        );
+      } else {
+        setConnectionNotice("Quick Tunnel baslatildi. URL olusunca burada gorunecek.");
+      }
+    } catch {
+      setConnectionNotice("Quick Tunnel komutu calistirilamadi. cloudflared kurulu mu kontrol et.");
+    } finally {
+      setQuickTunnelBusy(false);
     }
   };
 
@@ -1218,7 +1407,37 @@ export default function App() {
                   >
                     Bu PC (LAN)
                   </button>
+                  <button
+                    type="button"
+                    className="soft-btn tiny-btn"
+                    onClick={() => {
+                      handleApplyConnectionPreset("cloudflare");
+                    }}
+                    disabled={!quickTunnelState.publicUrl}
+                  >
+                    Cloudflare URL
+                  </button>
                 </div>
+              ) : null}
+
+              {isDesktop ? (
+                <div className="connection-tunnel-row">
+                  <button
+                    type="button"
+                    className="soft-btn tiny-btn"
+                    onClick={handleQuickTunnelToggle}
+                    disabled={quickTunnelBusy || quickTunnelState.status === "stopping"}
+                  >
+                    {quickTunnelRunning ? "Quick Tunnel Durdur" : "Quick Tunnel Baslat"}
+                  </button>
+                  <span className={`connection-tunnel-status ${quickTunnelState.status}`}>
+                    {quickTunnelStatusLabel}
+                  </span>
+                </div>
+              ) : null}
+
+              {isDesktop && quickTunnelState.publicUrl ? (
+                <small className="connection-note">Cloudflare URL: {quickTunnelState.publicUrl}</small>
               ) : null}
 
               <form className="connection-config-form" onSubmit={handleSaveConnectionConfig}>
@@ -1251,7 +1470,7 @@ export default function App() {
 
               {isDesktop ? (
                 <small className="connection-hint">
-                  Arkadasin ayni Wi-Fi/LAN'da ise Bu PC (LAN) kullan. Farkli ag icin tunnel ya da port yonlendirme gerekir.
+                  Ayni ag icin Bu PC (LAN), farkli ag icin Quick Tunnel Baslat sonra Cloudflare URL preset'ini sec.
                 </small>
               ) : null}
 

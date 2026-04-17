@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("mescordDesktop", {
   runtimeConfig,
   getAppInfo: () => ipcRenderer.invoke("desktop:app-info"),
   getConnectionConfig: () => ipcRenderer.invoke("desktop:connection-config"),
+  getQuickTunnelStatus: () => ipcRenderer.invoke("desktop:get-quick-tunnel-status"),
+  startQuickTunnel: (payload) => ipcRenderer.invoke("desktop:start-quick-tunnel", payload || {}),
+  stopQuickTunnel: () => ipcRenderer.invoke("desktop:stop-quick-tunnel"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-updates"),
   downloadUpdate: () => ipcRenderer.invoke("desktop:download-update"),
   installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
@@ -24,6 +27,18 @@ contextBridge.exposeInMainWorld("mescordDesktop", {
 
     return () => {
       ipcRenderer.removeListener("updates:event", wrapped);
+    };
+  },
+  onConnectionEvent: (listener) => {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on("connection:event", wrapped);
+
+    return () => {
+      ipcRenderer.removeListener("connection:event", wrapped);
     };
   },
 });

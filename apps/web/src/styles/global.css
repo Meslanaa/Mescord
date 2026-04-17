@@ -362,6 +362,40 @@ select:focus {
   gap: 8px;
 }
 
+.connection-tunnel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.connection-tunnel-status {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(189, 223, 255, 0.3);
+  background: rgba(8, 17, 28, 0.72);
+  color: #c7def6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.connection-tunnel-status.ready {
+  border-color: rgba(138, 255, 173, 0.45);
+  color: #b7ffcb;
+}
+
+.connection-tunnel-status.starting,
+.connection-tunnel-status.stopping {
+  border-color: rgba(126, 245, 255, 0.52);
+  color: #94f7ff;
+}
+
+.connection-tunnel-status.error {
+  border-color: rgba(255, 122, 122, 0.6);
+  color: #ffb9b9;
+}
+
 .connection-config-form label {
   display: grid;
   gap: 6px;
