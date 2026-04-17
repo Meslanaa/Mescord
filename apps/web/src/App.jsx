@@ -1884,71 +1884,40 @@ export default function App() {
         </main>
       ) : (
         <main className="room-layout">
-          <motion.header
-            className="room-topbar"
-            initial={{ opacity: 0, y: -14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-          >
-            <div>
-              <p className="topbar-label">Aktif oda</p>
-              <h2>#{activeRoomId}</h2>
-              <small>
-                {participants.length} kisi bagli • {roomLocked ? "Oda kilitli" : "Oda acik"}
-                {isOwner ? " • Oda sahibi sensin" : ""}
-              </small>
-            </div>
-
-            <div className="topbar-actions">
-              {isDesktop ? (
-                <button type="button" className="soft-btn" onClick={handleManualUpdateCheck}>
-                  {updateStatusLabel(updateState.status)}
-                </button>
-              ) : null}
-
-              {accountUser ? (
-                <select className="presence-select" value={presenceStatus || "online"} onChange={handlePresenceChange}>
-                  {PRESENCE_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-
-              <select className="theme-select" value={theme} onChange={(event) => setTheme(event.target.value)}>
-                {THEMES.map((themeItem) => (
-                  <option key={themeItem.id} value={themeItem.id}>
-                    {themeItem.label}
-                  </option>
-                ))}
-              </select>
-
-              <button type="button" className="soft-btn" onClick={handleCopyInvite}>
-                {copied ? "Kopyalandi" : "Davet linki"}
-              </button>
-              <button
-                type="button"
-                className="danger-btn"
-                onClick={() => {
-                  leaveGroupChannel();
-                  leaveRoom();
-                  clearLastSession();
-                  setCopied(false);
-                }}
-              >
-                Odadan Cik
-              </button>
-            </div>
-          </motion.header>
+          <header className="room-topbar" style={{ display: 'flex', padding: '12px 16px', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-1)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: '18px' }}>#{activeRoomId}</h2>
+        <small style={{ color: 'var(--text-dim)' }}>
+          {participants.length} kisi bagli   {roomLocked ? "Oda kilitli" : "Oda acik"}
+        </small>
+      </div>
+      <div className="topbar-actions" style={{ display: 'flex', gap: '8px' }}>
+        {isDesktop ? (
+          <button type="button" className="soft-btn" onClick={handleManualUpdateCheck}>
+            {updateStatusLabel(updateState.status)}
+          </button>
+        ) : null}
+      </div>
+    </header>
 
           {systemNotice ? <div className="system-notice">{systemNotice}</div> : null}
 
           <section className="discord-workspace">
             <aside className="panel guild-rail">
               <header className="guild-rail-head">
-                <strong>Server Rail</strong>
-                <span>{groups.length} grup</span>
+                <button
+                  type="button"
+                  className={`guild-node home-btn ${!selectedGroup ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedGroupId(null);
+                    setConversationMode("dm");
+                  }}
+                  title="Ana Sayfa (Direkt Mesajlar)"
+                  style={{ width: '48px', height: '48px', borderRadius: !selectedGroup ? '16px' : '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '20px', transition: 'all 0.2s', marginBottom: '8px' }}
+                >
+                  <img src="/mescord-logo.png" alt="M" style={{ width: '28px', height: '28px' }} onError={(e) => { e.target.style.display='none'; e.target.parentNode.innerHTML='M'; }} />
+                </button>
+                <div style={{ width: '32px', height: '2px', background: 'rgba(255,255,255,0.06)', marginBottom: '8px' }} />
               </header>
 
               <div className="guild-rail-list">
@@ -1999,133 +1968,89 @@ export default function App() {
 
             <aside className="panel channel-sidebar">
               <header className="channel-sidebar-head">
-                <h3>{selectedGroup?.name || "Server Sec"}</h3>
-                <small>{selectedGroup ? `${selectedGroup.memberCount} uye` : "Grup secmedin"}</small>
+                <h3 style={{ padding: '0 16px', margin: '16px 0 0 0', fontSize: '15px' }}>{selectedGroup ? selectedGroup.name : "Ana Sayfa"}</h3>
+                <small style={{ padding: '0 16px', display: 'block', color: 'var(--text-dim)', marginBottom: '16px' }}>{selectedGroup ? `${selectedGroup?.memberCount || 0} uye` : "Direkt Mesajlar"}</small>
               </header>
 
-              <div className="conversation-switch">
-                <button
-                  type="button"
-                  className={`soft-btn tiny-btn ${conversationMode === "channel" ? "active-mode" : ""}`}
-                  onClick={() => {
-                    setConversationMode("channel");
-                  }}
-                >
-                  Kanal
-                </button>
-                <button
-                  type="button"
-                  className={`soft-btn tiny-btn ${conversationMode === "dm" ? "active-mode" : ""}`}
-                  onClick={() => {
-                    setConversationMode("dm");
-                  }}
-                >
-                  DM
-                </button>
+              <div className="sidebar-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 8px' }}>
+                {!selectedGroup ? (
+                   <>
+                     <button type="button" className="channel-node" style={{ justifyContent: 'flex-start', gap: '12px' }} onClick={() => { setConversationMode('dm'); }}>
+                       <span style={{ fontSize: '20px' }}>👋</span> Arkadaslar
+                     </button>
+                     <div style={{ marginTop: '16px', marginBottom: '8px', padding: '0 8px', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-dim)', textTransform: 'uppercase' }}>DIREKT MESAJLAR</div>
+                     {friends.length === 0 ? <p style={{ padding: '0 8px', color: 'var(--text-dim)', fontSize: '13px' }}>DM yok.</p> : null}
+                     {friends.map((friend) => (
+                        <button
+                          key={`dm-${friend.id}`}
+                          type="button"
+                          className={`channel-node ${activeDmTarget?.id === friend.id ? "active" : ""}`}
+                          onClick={() => {
+                            handleSelectDmFriend(friend);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px', borderRadius: '4px' }}
+                        >
+                          <div style={{ position: 'relative' }}>
+                            <div className="avatar-chip" style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: friend.color || '#00c6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', color: '#fff' }}>
+                              {initialsLabel(friend.displayName || friend.username)}
+                            </div>
+                            <span className={`presence-dot ${friend.presenceStatus || "offline"}`} style={{ position: 'absolute', bottom: 0, right: 0, width: '10px', height: '10px', borderRadius: '50%', border: '2px solid var(--bg-1)' }} />
+                          </div>
+                          <span style={{ flex: 1, textAlign: 'left', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{friend.displayName || friend.username}</span>
+                          {(dmUnreadMap[friend.id] || 0) > 0 && <span className="unread-badge" style={{ background: 'var(--danger)', color: '#fff', padding: '2px 6px', borderRadius: '12px', fontSize: '11px' }}>{dmUnreadMap[friend.id]}</span>}
+                        </button>
+                      ))}
+                   </>
+                ) : (
+                   <>
+                     <div style={{ marginTop: '16px', marginBottom: '8px', padding: '0 8px', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       METIN KANALLARI
+                     </div>
+                     {filteredChannels.filter(c => c.type !== 'voice').length === 0 ? <p style={{ padding: '0 8px', color: 'var(--text-dim)', fontSize: '13px' }}>Kanal bulunamadi.</p> : null}
+                     {filteredChannels.filter(c => c.type !== 'voice').map((channel) => (
+                        <button
+                          key={channel.id}
+                          type="button"
+                          className={`channel-node ${selectedChannel?.id === channel.id ? "active" : ""}`}
+                          onClick={() => {
+                            setConversationMode("channel");
+                            setSelectedChannelId(channel.id);
+                            clearChannelUnread(channel.id);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '4px', color: selectedChannel?.id === channel.id ? '#fff' : 'var(--text-dim)' }}
+                        >
+                          <span style={{ fontSize: '16px', color: 'var(--text-dim)' }}>#</span>
+                          <span style={{ flex: 1, textAlign: 'left' }}>{channel.name}</span>
+                          {(channelUnreadMap[channel.id] || 0) > 0 && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-1)' }} />}
+                        </button>
+                     ))}
+
+                     <div style={{ marginTop: '24px', marginBottom: '8px', padding: '0 8px', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       SES KANALLARI
+                     </div>
+                     {filteredChannels.filter(c => c.type === 'voice').length === 0 ? <p style={{ padding: '0 8px', color: 'var(--text-dim)', fontSize: '13px' }}>Ses kanalı bulunamadi.</p> : null}
+                     {filteredChannels.filter(c => c.type === 'voice').map((channel) => (
+                        <button
+                          key={channel.id}
+                          type="button"
+                          className={`channel-node ${selectedChannel?.id === channel.id ? "active" : ""}`}
+                          onClick={() => {
+                            setConversationMode("channel");
+                            setSelectedChannelId(channel.id);
+                            clearChannelUnread(channel.id);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '4px', color: selectedChannel?.id === channel.id ? '#fff' : 'var(--text-dim)' }}
+                        >
+                          <span style={{ fontSize: '16px', color: 'var(--text-dim)' }}>🔊</span>
+                          <span style={{ flex: 1, textAlign: 'left' }}>{channel.name}</span>
+                          {(channelUnreadMap[channel.id] || 0) > 0 && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-1)' }} />}
+                        </button>
+                     ))}
+                   </>
+                )}
               </div>
 
-              <input
-                type="text"
-                placeholder="Kanal ara"
-                value={channelSearchInput}
-                onChange={(event) => setChannelSearchInput(event.target.value)}
-              />
-
-              <section className="sidebar-block">
-                <div className="sidebar-block-head">
-                  <h4>Pinned DM</h4>
-                  <small>{pinnedFriends.length}</small>
-                </div>
-
-                <div className="dm-roster">
-                  {!accountUser ? <p className="guild-empty">DM listesi icin hesap girisi yap.</p> : null}
-                  {accountUser && pinnedFriends.length === 0 ? (
-                    <p className="guild-empty">Pinlenecek DM henuz yok.</p>
-                  ) : null}
-                  {pinnedFriends.map((friend) => (
-                    <button
-                      key={`pinned-${friend.id}`}
-                      type="button"
-                      className={`dm-node ${activeDmTarget?.id === friend.id ? "active" : ""}`}
-                      onClick={() => {
-                        handleSelectDmFriend(friend);
-                      }}
-                    >
-                      <span className={`presence-dot ${friend.presenceStatus || "offline"}`} />
-                      <span>{friend.displayName || friend.username}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="sidebar-block">
-                <div className="sidebar-block-head">
-                  <h4>Direkt Mesajlar</h4>
-                  <small>{friends.length}{totalDmUnread ? ` • ${totalDmUnread} yeni` : ""}</small>
-                </div>
-
-                <div className="dm-roster">
-                  {friends.length === 0 ? <p className="guild-empty">Arkadas bulunamadi.</p> : null}
-                  {friends.map((friend) => {
-                    const unreadCount = Number(dmUnreadMap[friend.id] || 0);
-
-                    return (
-                      <button
-                        key={`dm-${friend.id}`}
-                        type="button"
-                        className={`dm-node ${activeDmTarget?.id === friend.id ? "active" : ""}`}
-                        onClick={() => {
-                          handleSelectDmFriend(friend);
-                        }}
-                      >
-                        <span className={`presence-dot ${friend.presenceStatus || "offline"}`} />
-                        <span className="dm-node-name">{friend.displayName || friend.username}</span>
-                        {unreadCount > 0 ? (
-                          <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="sidebar-block">
-                <div className="sidebar-block-head">
-                  <h4>Text Kanallar</h4>
-                  <small>{filteredChannels.length}</small>
-                </div>
-
-                <div className="channel-list">
-                  {filteredChannels.length === 0 ? <p className="guild-empty">Kanal bulunamadi.</p> : null}
-                  {filteredChannels.map((channel) => {
-                    const unreadCount = Number(channelUnreadMap[channel.id] || 0);
-
-                    return (
-                      <button
-                        key={channel.id}
-                        type="button"
-                        className={`channel-node ${selectedChannel?.id === channel.id ? "active" : ""}`}
-                        onClick={() => {
-                          setConversationMode("channel");
-                          setSelectedChannelId(channel.id);
-                          clearChannelUnread(channel.id);
-                        }}
-                      >
-                        <div className="channel-node-main">
-                          <span># {channel.name}</span>
-                          {unreadCount > 0 ? (
-                            <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-                          ) : null}
-                        </div>
-                        <small>{channel.type || "text"}</small>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {canCreateChannel ? (
-                <form className="channel-create-form" onSubmit={handleCreateChannelSubmit}>
+              {canCreateChannel ? <form className="channel-create-form" onSubmit={handleCreateChannelSubmit}>
                   <input
                     type="text"
                     placeholder="Yeni kanal"
@@ -2144,417 +2069,136 @@ export default function App() {
               {!socialAuthReady && joined && authToken ? (
                 <small className="guild-empty">Kanal socket auth kuruluyor...</small>
               ) : null}
-            </aside>
 
-            <section className="workspace-center">
-              <motion.section
-                className="panel conversation-stage"
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45 }}
-              >
-                <div className="panel-head conversation-head">
-                  <div>
-                    <h3>
-                      {hasDmConversation
-                        ? `@${activeDmTarget.displayName || activeDmTarget.username}`
-                        : selectedChannel
-                          ? `#${selectedChannel.name}`
-                          : "Kanal Mesajlasma"}
-                    </h3>
-                    <p>
-                      {hasDmConversation
-                        ? "Direkt mesaj akisi, voice odasindan cikmadan surdurulur."
-                        : "Server text channel realtime + typing + slash baseline aktif."}
-                    </p>
-                    <small className="conversation-topic">{conversationTopic}</small>
-                  </div>
-
-                  <div className="conversation-mini-badges">
-                    {!hasDmConversation && groupChannelContext.channelName ? (
-                      <span className="mini-chip">Active #{groupChannelContext.channelName}</span>
-                    ) : null}
-                    <span className="mini-chip">{socialAuthReady ? "Socket Hazir" : "Socket Bekliyor"}</span>
-                    {conversationMode !== "channel" && selectedChannelIdSafe && channelUnreadMap[selectedChannelIdSafe] ? (
-                      <span className="mini-chip alert-chip">
-                        {channelUnreadMap[selectedChannelIdSafe]} unread
-                      </span>
-                    ) : null}
+              {isConnected && activeRoomId ? (
+                <div className="voice-connected-bar">
+                  <div className="live-dot" /> Sese Baglanildi
+                </div>
+              ) : null}
+              <div className="current-user-bar">
+                <div className="user-bar-profile">
+                  <div className="avatar-chip" style={{ backgroundColor: selfParticipant?.color || avatarColor }}>{initialsLabel(displayName)}</div>
+                  <div className="user-bar-name">
+                    <strong>{displayName}</strong>
+                    <small>{isConnected ? "Ses Kanalinda" : (presenceStatus || "Online")}</small>
                   </div>
                 </div>
-
-                <div className="chat-scroll conversation-scroll">
-                  {hasDmConversation ? (
-                    dmMessages.length === 0 ? (
-                      <p className="chat-empty">Bu DM henuz bos.</p>
-                    ) : (
-                      dmMessages.map((message) => {
-                        const isSelfMessage = message.fromUserId === accountUser?.id;
-                        const isMentioned = hasTextMention(message.text, accountUser) && !isSelfMessage;
-
-                        return (
-                          <article
-                            key={message.id}
-                            className={`chat-message dm-conversation-message ${isSelfMessage ? "is-self" : ""}`}
-                          >
-                            <header>
-                              <strong>
-                                {message.fromUser?.displayName || message.fromUser?.username || "Guest"}
-                              </strong>
-                              <span>{formatChatTime(message.createdAt)}</span>
-                            </header>
-                            <p className={isMentioned ? "mention-text" : ""}>{message.text}</p>
-                          </article>
-                        );
-                      })
-                    )
-                  ) : groupChannelMessages.length === 0 ? (
-                    <p className="chat-empty">Bu kanalda henuz mesaj yok.</p>
-                  ) : (
-                    groupChannelMessages.map((message) => {
-                      const isMentioned =
-                        hasTextMention(message.text, accountUser) && message.fromUserId !== accountUser?.id;
-
-                      return (
-                        <article key={message.id} className="chat-message">
-                          <header>
-                            <strong style={{ color: "#9ce8ff" }}>
-                              {message.fromUser?.displayName || message.fromUser?.username || "Guest"}
-                            </strong>
-                            <span>{formatChatTime(message.createdAt)}</span>
-                          </header>
-                          <p className={isMentioned ? "mention-text" : ""}>{message.text}</p>
-                        </article>
-                      );
-                    })
-                  )}
-                </div>
-
-                {!hasDmConversation && groupTypingLabel ? <p className="typing-hint">{groupTypingLabel}</p> : null}
-
-                {hasDmConversation ? (
-                  <form className="chat-form" onSubmit={handleSendDmSubmit}>
-                    <input
-                      type="text"
-                      placeholder="DM yaz..."
-                      value={dmInput}
-                      onChange={(event) => setDmInput(event.target.value)}
-                      maxLength={1200}
-                    />
-                    <button type="submit" className="primary-btn" disabled={!activeDmTarget}>
-                      Gonder
-                    </button>
-                  </form>
-                ) : (
-                  <form className="chat-form" onSubmit={handleSendGroupMessage}>
-                    <input
-                      type="text"
-                      placeholder="Kanal mesaji yaz... (/me komutu desteklenir)"
-                      value={groupComposerInput}
-                      onChange={(event) => setGroupComposerInput(event.target.value)}
-                      maxLength={1800}
-                    />
-                    <button type="submit" className="primary-btn" disabled={!selectedChannel}>
-                      Gonder
-                    </button>
-                  </form>
-                )}
-              </motion.section>
-
-              <section className="room-grid">
-                <motion.div
-                  className="panel participants-panel"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.55 }}
-                >
-                  <div className="panel-head">
-                    <h3>Katilimcilar</h3>
-                    <p>Konusan kisiler kartlarda canli titresimle one cikar.</p>
-                  </div>
-
-                  <div className="participants-grid">
-                    <AnimatePresence>
-                      {participants.map((participant) => (
-                        <ParticipantCard
-                          key={participant.id}
-                          participant={participant}
-                          isOwner={participant.id === ownerId}
-                          level={participant.isSelf ? localLevel : peerLevels[participant.id] || 0}
-                          quality={participant.isSelf ? "local" : peerQuality[participant.id] || "unknown"}
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                </motion.div>
-
-                <div className="side-stack">
-                  <motion.aside
-                    className="panel control-panel"
-                    initial={{ opacity: 0, y: 24 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                  >
-                    <div className="panel-head">
-                      <h3>Ses Kontrolu</h3>
-                      <p>Push-to-talk aktifken Space basiliyken konusursun.</p>
-                    </div>
-
-                    <div className="meter-wrap" role="presentation">
-                      {Array.from({ length: 28 }).map((_, index) => {
-                        const energy = Math.max(localLevel * 8 - index * 0.35, 0);
-
-                        return (
-                          <span
-                            key={`bar-${index}`}
-                            className="meter-bar"
-                            style={{
-                              transform: `scaleY(${Math.min(1, energy + 0.08)})`,
-                              opacity: Math.min(1, energy + 0.25),
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    <div className="control-actions">
-                      <button
-                        type="button"
-                        className={`primary-btn ${isMuted ? "is-muted" : ""}`}
-                        onClick={toggleMute}
-                        disabled={pttEnabled}
-                      >
-                        {isMuted ? "Mikrofonu Ac" : "Mikrofonu Kapat"}
-                      </button>
-
-                      <label className="toggle-field">
-                        <input
-                          type="checkbox"
-                          checked={pttEnabled}
-                          onChange={(event) => setPttEnabled(event.target.checked)}
-                        />
-                        <span>Push-to-talk (Space)</span>
-                      </label>
-
-                      <label className="device-field">
-                        <span>Mikrofon cihazi</span>
-                        <select
-                          value={selectedInputDeviceId}
-                          onChange={(event) => {
-                            changeInputDevice(event.target.value);
-                          }}
-                        >
-                          <option value="">Sistem varsayilan</option>
-                          {audioInputDevices.map((device) => (
-                            <option key={device.deviceId} value={device.deviceId}>
-                              {device.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="reaction-row">
-                      {QUICK_REACTIONS.map((emoji) => (
-                        <button key={emoji} type="button" className="reaction-btn" onClick={() => sendReaction(emoji)}>
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-
-                    {isOwner ? (
-                      <div className="moderation-wrap">
-                        <h4>Moderasyon</h4>
-                        <button
-                          type="button"
-                          className="soft-btn moderation-btn"
-                          onClick={() => {
-                            setRoomLock(!roomLocked);
-                          }}
-                        >
-                          {roomLocked ? "Oda Kilidini Ac" : "Odayi Kilitle"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="soft-btn moderation-btn"
-                          onClick={() => {
-                            muteAllParticipants();
-                          }}
-                        >
-                          Herkesi Sustur
-                        </button>
-
-                        <div className="kick-list">
-                          {remoteParticipants.length === 0 ? <small>Odada baska katilimci yok.</small> : null}
-                          {remoteParticipants.map((participant) => (
-                            <button
-                              key={`kick-${participant.id}`}
-                              type="button"
-                              className="kick-btn"
-                              onClick={() => {
-                                kickParticipant(participant.id);
-                              }}
-                            >
-                              {participant.name} kullanicisini cikar
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </motion.aside>
-
-                  <motion.section
-                    className="panel chat-panel"
-                    initial={{ opacity: 0, y: 24 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.65 }}
-                  >
-                    <div className="panel-head">
-                      <h3>Oda Sohbeti</h3>
-                      <p>Ses kanalindan ayrilmadan hizli mesajlas.</p>
-                    </div>
-
-                    <div className="chat-scroll">
-                      {chatMessages.length === 0 ? (
-                        <p className="chat-empty">Sohbet henuz bos. Ilk mesaji gonder!</p>
-                      ) : (
-                        chatMessages.map((message) => {
-                          const isMentioned =
-                            hasTextMention(message.text, accountUser) && message.fromName !== selfParticipantName;
-
-                          return (
-                            <article key={message.id} className="chat-message">
-                              <header>
-                                <strong style={{ color: message.fromColor || "#7de6ff" }}>
-                                  {message.fromName || "Guest"}
-                                </strong>
-                                <span>{formatChatTime(message.at)}</span>
-                              </header>
-                              <p className={isMentioned ? "mention-text" : ""}>{message.text}</p>
-                            </article>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    <form className="chat-form" onSubmit={handleSendChat}>
-                      <input
-                        type="text"
-                        placeholder="Mesajini yaz..."
-                        value={chatInput}
-                        onChange={(event) => setChatInput(event.target.value)}
-                        maxLength={400}
-                      />
-                      <button type="submit" className="primary-btn">
-                        Gonder
-                      </button>
-                    </form>
-                  </motion.section>
-                </div>
-              </section>
-            </section>
-
-            <aside className="panel utility-sidebar">
-              <section className="utility-feed-block">
-                <div className="panel-head utility-head feed-head">
-                  <div>
-                    <h3>Bildirimler</h3>
-                    <p>Mention, friend request ve sistem olaylari.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="soft-btn tiny-btn"
-                    onClick={clearActivityFeed}
-                    disabled={activityFeed.length === 0}
-                  >
-                    Temizle
+                <div className="user-bar-actions">
+                  <button type="button" className={`icon-btn ${isMuted ? 'muted' : ''}`} onClick={toggleMute} title="Mikrofon">
+                    {isMuted ? "Mut" : "Mic"}
+                  </button>
+                  <button type="button" className={`icon-btn ${pttEnabled ? 'active' : ''}`} onClick={() => setPttEnabled(!pttEnabled)} title="Bas Konus">
+                    PTT
                   </button>
                 </div>
+              </div>
+            </aside>
 
-                <div className="activity-feed">
-                  {activityFeed.length === 0 ? (
-                    <p className="guild-empty">Yeni bildirim yok.</p>
-                  ) : (
-                    activityFeed.map((entry) => (
-                      <article
-                        key={entry.id}
-                        className={`activity-item ${entry.type === "mention" ? "is-mention" : ""}`}
-                      >
-                        <header>
-                          <strong>{entry.title}</strong>
-                          <span>{formatChatTime(entry.at)}</span>
-                        </header>
-                        {entry.detail ? <small>{entry.detail}</small> : null}
-                        <p>{truncateText(entry.text || "Detay yok.", 110)}</p>
+            
+            <section className="workspace-center" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 16px 24px', background: 'var(--bg-2)' }}>
+              <div className="conversation-head" style={{ padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                  {hasDmConversation
+                    ? `@${activeDmTarget?.displayName || activeDmTarget?.username}`
+                    : selectedChannel
+                      ? `#${selectedChannel.name}`
+                      : "Kanal Mesajlaşma"}
+                </h3>
+                <small className="conversation-topic" style={{ color: 'var(--text-dim)' }}>
+                  {conversationTopic || "Burası sohbetin başlangıcı."}
+                </small>
+              </div>
+
+              {/* Voice Participants Top Row */}
+              {isConnected && participants.length > 0 && (
+                <div className="voice-participants-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '16px', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '16px' }}>
+                  <AnimatePresence>
+                    {participants.map((participant) => (
+                      <ParticipantCard
+                        key={participant.id}
+                        participant={participant}
+                        isOwner={participant.id === ownerId}
+                        level={participant.isSelf ? localLevel : peerLevels[participant.id] || 0}
+                        quality={participant.isSelf ? "local" : peerQuality[participant.id] || "unknown"}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* Chat Area */}
+              <div className="chat-scroll" style={{ flex: 1, overflowY: "auto", display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '8px' }}>
+                {(hasDmConversation ? dmMessages : selectedChannel ? groupMessages : chatMessages).length === 0 ? (
+                  <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-dim)' }}>
+                    <h3>Mesaj yok.</h3>
+                  </div>
+                ) : (
+                  (hasDmConversation ? dmMessages : selectedChannel ? groupMessages : chatMessages).map((message) => {
+                    const fromName = message.fromName || message.fromUser?.displayName || message.fromUser?.username || "Guest";
+                    const isMentioned = !hasDmConversation && hasTextMention(message.text, accountUser);
+                    return (
+                      <article key={message.id} className="chat-message" style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                        <div className="avatar-chip" style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: message.fromColor || '#00c6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0, color: '#fff' }}>
+                          {initialsLabel(fromName)}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <header style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                            <strong style={{ color: message.fromColor || "var(--text-1)", fontSize: '15px' }}>{fromName}</strong>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{formatChatTime(message.createdAt || message.at)}</span>
+                          </header>
+                          <p className={isMentioned ? "mention-text" : ""} style={{ margin: 0, marginTop: '4px', fontSize: '14px', lineHeight: '1.4' }}>{message.text}</p>
+                        </div>
                       </article>
-                    ))
-                  )}
-                </div>
-              </section>
+                    );
+                  })
+                )}
+              </div>
 
-              <section className="utility-search-block">
-                <div className="panel-head utility-head">
-                  <h3>Arama</h3>
-                  <p>DM, kanal ve voice sohbetinde hizli tarama.</p>
-                </div>
+              {/* Typing indicator */}
+              {!hasDmConversation && groupTypingLabel ? <p className="typing-hint" style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '8px' }}>{groupTypingLabel}</p> : null}
 
-                <input
-                  type="text"
-                  placeholder="Mesaj veya kullanici ara"
-                  value={messageSearchInput}
-                  onChange={(event) => setMessageSearchInput(event.target.value)}
-                />
+              {/* Input Area */}
+              <div style={{ marginTop: '16px', background: 'var(--bg-1)', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                <form 
+                  style={{ flex: 1, display: 'flex' }} 
+                  onSubmit={hasDmConversation ? handleSendDmSubmit : (selectedChannel ? handleSendGroupMessage : handleSendChat)}
+                >
+                  <input
+                    type="text"
+                    placeholder={hasDmConversation ? "DM yaz..." : "Mesaj gönder..."}
+                    value={hasDmConversation ? dmInput : (selectedChannel ? groupComposerInput : chatInput)}
+                    onChange={(event) => hasDmConversation ? setDmInput(event.target.value) : (selectedChannel ? setGroupComposerInput(event.target.value) : setChatInput(event.target.value))}
+                    maxLength={1800}
+                    style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text-1)', fontSize: '15px', outline: 'none' }}
+                  />
+                  <button type="submit" style={{ display: 'none' }}>Gönder</button>
+                </form>
+              </div>
+            </section>
 
-                <div className="search-results">
-                  {!messageSearchInput.trim() ? (
-                    <p className="guild-empty">Aramak icin bir kelime yaz.</p>
-                  ) : searchResults.length === 0 ? (
-                    <p className="guild-empty">Sonuc bulunamadi.</p>
-                  ) : (
-                    searchResults.map((item) => (
-                      <article key={item.id} className="search-result-card">
-                        <header>
-                          <strong>{item.author}</strong>
-                          <span>{conversationScopeLabel(item.scope)}</span>
-                        </header>
-                        <p>{item.text}</p>
-                        <small>{formatChatTime(item.at)}</small>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </section>
+            <aside className="panel utility-sidebar" style={{ display: 'flex', flexDirection: 'column' }}>
+              <section className="utility-members-block" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+                <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: '12px', fontWeight: 600 }}>
+                  Çevrimiçi — {participants.length}
+                </h3>
 
-              <section className="utility-members-block">
-                <div className="panel-head utility-head">
-                  <h3>Uye Listesi</h3>
-                  <p>Voice odasindaki canli uye durumlari.</p>
-                </div>
-
-                <div className="member-list">
+                <div className="member-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {participants.map((participant) => (
-                    <article key={`member-${participant.id}`} className="member-row">
-                      <span className="member-avatar" style={{ backgroundColor: participant.color || "#00c6ff" }}>
+                    <article key={`member-${participant.id}`} className="member-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px', borderRadius: '4px', cursor: 'pointer' }}>
+                      <span className="member-avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: participant.color || "#00c6ff", display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}>
                         {initialsLabel(participant.name)}
                       </span>
-                      <div>
-                        <strong>{participant.name || "Guest"}</strong>
-                        <small>
-                          {participant.muted ? "Muted" : "Canli"}
-                          {participant.id === ownerId ? " • Owner" : ""}
-                          {participant.isSelf ? " • Sen" : ""}
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <strong style={{ fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: participant.color || 'var(--text-1)' }}>
+                          {participant.name || "Guest"}
+                        </strong>
+                        <small style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {participant.muted ? "Susturuldu" : "Yayında"}
+                          {participant.id === ownerId ? " 👑" : ""}
                         </small>
                       </div>
                     </article>
                   ))}
-                </div>
-
-                <div className="member-meta-block">
-                  <small>
-                    Active Channel: {groupChannelContext.channelName ? `#${groupChannelContext.channelName}` : "Secilmedi"}
-                  </small>
-                  <small>Socket Social: {socialAuthReady ? "Hazir" : "Bekliyor"}</small>
                 </div>
               </section>
             </aside>

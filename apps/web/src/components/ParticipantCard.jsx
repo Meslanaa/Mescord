@@ -50,7 +50,7 @@ export default function ParticipantCard({ participant, isOwner = false, level = 
       </div>
 
       <div className="participant-meta">
-        <div className="participant-name-row">
+        <div className="participant-name-row" style={{ minWidth: 0 }}>
           <h3>{participant.name || "Guest"}</h3>
           {participant.isSelf ? <span className="self-chip">Sen</span> : null}
           {isOwner ? <span className="owner-chip">Owner</span> : null}

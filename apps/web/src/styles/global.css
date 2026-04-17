@@ -791,14 +791,25 @@ select:focus {
 .channel-sidebar,
 .member-sidebar,
 .utility-sidebar {
-  padding: 14px;
+  width: 240px;
+  background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .guild-rail {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-  background: linear-gradient(170deg, rgba(9, 18, 30, 0.9), rgba(5, 12, 20, 0.88));
+  width: 72px;
+  background: var(--bg-0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  scrollbar-width: none;
 }
 
 .guild-rail-head {
@@ -900,10 +911,11 @@ select:focus {
 }
 
 .channel-sidebar {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  background: linear-gradient(170deg, rgba(11, 22, 37, 0.88), rgba(6, 13, 22, 0.9));
+  width: 240px;
+  background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
 }
 
 .conversation-switch {
@@ -1085,8 +1097,11 @@ select:focus {
 }
 
 .workspace-center {
-  display: grid;
-  gap: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  min-width: 0;
 }
 
 .conversation-stage {
@@ -2078,3 +2093,87 @@ select:focus {
     border-radius: 8px;
   }
 }
+
+.current-user-bar {
+  margin-top: auto;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.user-bar-profile {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.avatar-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.user-bar-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.user-bar-name strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-bar-name small {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-bar-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.1); }
+.icon-btn.muted { color: var(--danger); }
+.icon-btn.active { color: var(--accent-lime); }
+
+.voice-connected-bar {
+  margin-top: auto;
+  background: rgba(142, 255, 107, 0.1);
+  border-top: 1px solid rgba(142, 255, 107, 0.2);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--accent-lime);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-connected-bar .live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent-lime); animation: pulse 2s infinite;
+}
+@keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
