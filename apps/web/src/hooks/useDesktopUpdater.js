@@ -7,6 +7,7 @@ const INITIAL_STATE = {
   downloadedVersion: "",
   progress: 0,
   error: "",
+  manualDownload: false,
 };
 
 export function useDesktopUpdater() {
@@ -33,12 +34,18 @@ export function useDesktopUpdater() {
     }
 
     if (eventPayload.type === "available") {
+      const manualDownload = Boolean(eventPayload.info?.manual);
       setState((prev) => ({
         ...prev,
         status: "available",
-        availableVersion: eventPayload.info?.version || "",
-        message: "Yeni Mescord surumu bulundu. Arka planda indiriliyor...",
+        availableVersion: eventPayload.info?.version || eventPayload.info?.tagName || "",
+        message:
+          eventPayload.message ||
+          (manualDownload
+            ? "Yeni release bulundu. Indir butonu installer baglantisini acar."
+            : "Yeni Mescord surumu bulundu. Arka planda indiriliyor..."),
         error: "",
+        manualDownload,
       }));
       setIsModalOpen(true);
       return;
@@ -50,6 +57,7 @@ export function useDesktopUpdater() {
         status: "up-to-date",
         message: "Su an en guncel surumu kullaniyorsun.",
         error: "",
+        manualDownload: false,
       }));
       return;
     }
@@ -60,6 +68,7 @@ export function useDesktopUpdater() {
         status: "downloading",
         progress: Number(eventPayload.progress?.percent || 0),
         message: "Guncelleme indiriliyor...",
+        manualDownload: false,
       }));
       setIsModalOpen(true);
       return;
@@ -72,6 +81,7 @@ export function useDesktopUpdater() {
         downloadedVersion: eventPayload.info?.version || prev.availableVersion,
         message: "Guncelleme indirildi. Simdi Kur butonuyla mevcut kurulum klasorune guncelleyebilirsin.",
         progress: 100,
+        manualDownload: false,
       }));
       setIsModalOpen(true);
       return;
@@ -84,6 +94,19 @@ export function useDesktopUpdater() {
         message: eventPayload.message || "Guncelleme arka planda kuruluyor...",
         progress: 100,
         error: "",
+        manualDownload: false,
+      }));
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (eventPayload.type === "manual-download") {
+      setState((prev) => ({
+        ...prev,
+        status: "info",
+        message: eventPayload.message || "Installer baglantisi acildi.",
+        error: "",
+        manualDownload: true,
       }));
       setIsModalOpen(true);
       return;
@@ -94,6 +117,7 @@ export function useDesktopUpdater() {
         ...prev,
         status: "info",
         message: eventPayload.message || "Update kontrolu sadece paketli surumde aciktir.",
+        manualDownload: false,
       }));
       return;
     }
@@ -103,6 +127,7 @@ export function useDesktopUpdater() {
         ...prev,
         status: "error",
         error: eventPayload.error || "Bilinmeyen update hatasi",
+        manualDownload: false,
       }));
       setIsModalOpen(true);
     }
@@ -144,6 +169,7 @@ export function useDesktopUpdater() {
         ...prev,
         status: "error",
         error: result.message,
+        manualDownload: false,
       }));
       setIsModalOpen(true);
     }
@@ -162,6 +188,7 @@ export function useDesktopUpdater() {
         ...prev,
         status: "error",
         error: result.message,
+        manualDownload: false,
       }));
       setIsModalOpen(true);
     }

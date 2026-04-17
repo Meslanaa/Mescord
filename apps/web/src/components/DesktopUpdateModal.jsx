@@ -89,7 +89,7 @@ export default function DesktopUpdateModal({
             </button>
             {canDownload ? (
               <button type="button" className="primary-btn" onClick={onDownload}>
-                Indirmeyi Yeniden Dene
+                {state.manualDownload ? "Installeri Ac" : "Indirmeyi Yeniden Dene"}
               </button>
             ) : null}
             {canInstall ? (

@@ -8,11 +8,13 @@ autoUpdater.logger = log;
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = true;
+autoUpdater.allowDowngrade = true;
 
 let mainWindow = null;
 let updateAvailableInfo = null;
 let updateReadyInfo = null;
 let updateDownloadInProgress = false;
+let manualReleaseInfo = null;
 
 function sendToRenderer(channel, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -61,6 +63,99 @@ function getUpdateFeed() {
     owner,
     repo,
   };
+}
+
+function normalizeVersionLabel(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().replace(/^v/i, "").toLowerCase();
+}
+
+function sameVersionLabel(left, right) {
+  return normalizeVersionLabel(left) === normalizeVersionLabel(right);
+}
+
+function pickInstallerAsset(assets) {
+  if (!Array.isArray(assets)) {
+    return null;
+  }
+
+  const setupAsset = assets.find((asset) => {
+    const name = typeof asset?.name === "string" ? asset.name : "";
+    return /setup.*\.exe$/i.test(name);
+  });
+  if (setupAsset) {
+    return setupAsset;
+  }
+
+  const genericExe = assets.find((asset) => {
+    const name = typeof asset?.name === "string" ? asset.name : "";
+    return name.toLowerCase().endsWith(".exe");
+  });
+
+  return genericExe || null;
+}
+
+async function fetchLatestGitHubRelease() {
+  const feed = getUpdateFeed();
+  const endpoint = `https://api.github.com/repos/${feed.owner}/${feed.repo}/releases/latest`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, 9000);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Mescord-Updater",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub release API hatasi: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const asset = pickInstallerAsset(payload?.assets);
+
+    return {
+      id: payload?.id ? String(payload.id) : "",
+      tagName: typeof payload?.tag_name === "string" ? payload.tag_name : "",
+      htmlUrl: typeof payload?.html_url === "string" ? payload.html_url : "",
+      installerUrl: typeof asset?.browser_download_url === "string" ? asset.browser_download_url : "",
+      installerName: typeof asset?.name === "string" ? asset.name : "",
+      publishedAt: typeof payload?.published_at === "string" ? payload.published_at : "",
+      manual: true,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function setManualReleaseAvailable(info) {
+  manualReleaseInfo = info;
+  updateReadyInfo = null;
+  updateDownloadInProgress = false;
+  updateAvailableInfo = {
+    version: info?.tagName || "",
+    releaseId: info?.id || "",
+    htmlUrl: info?.htmlUrl || "",
+    installerUrl: info?.installerUrl || "",
+    installerName: info?.installerName || "",
+    publishedAt: info?.publishedAt || "",
+    manual: true,
+  };
+
+  sendToRenderer("updates:event", {
+    type: "available",
+    info: updateAvailableInfo,
+    message: "Yeni release algilandi. Sürüm adı farklı olsa da installer indirilebilir.",
+  });
 }
 
 function normalizeUrl(candidate) {
@@ -130,12 +225,14 @@ function createWindow() {
 
 function registerUpdateEvents() {
   autoUpdater.on("checking-for-update", () => {
+    manualReleaseInfo = null;
     sendToRenderer("updates:event", {
       type: "checking",
     });
   });
 
   autoUpdater.on("update-available", (info) => {
+    manualReleaseInfo = null;
     updateAvailableInfo = info;
     updateReadyInfo = null;
     updateDownloadInProgress = true;
@@ -147,6 +244,7 @@ function registerUpdateEvents() {
   });
 
   autoUpdater.on("update-not-available", () => {
+    manualReleaseInfo = null;
     updateAvailableInfo = null;
     updateReadyInfo = null;
     updateDownloadInProgress = false;
@@ -157,6 +255,7 @@ function registerUpdateEvents() {
   });
 
   autoUpdater.on("download-progress", (progress) => {
+    manualReleaseInfo = null;
     updateDownloadInProgress = true;
 
     sendToRenderer("updates:event", {
@@ -166,6 +265,7 @@ function registerUpdateEvents() {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
+    manualReleaseInfo = null;
     updateReadyInfo = info;
     updateDownloadInProgress = false;
 
@@ -195,8 +295,30 @@ async function checkForUpdates() {
 
   try {
     autoUpdater.setFeedURL(getUpdateFeed());
-    await autoUpdater.checkForUpdates();
-    return { ok: true };
+    const currentVersion = app.getVersion();
+    const result = await autoUpdater.checkForUpdates();
+
+    const hasNativeUpdate = Boolean(
+      result?.updateInfo?.version && !sameVersionLabel(result.updateInfo.version, currentVersion),
+    );
+    if (hasNativeUpdate || updateAvailableInfo) {
+      return { ok: true, mode: "native" };
+    }
+
+    try {
+      const latestRelease = await fetchLatestGitHubRelease();
+      if (
+        latestRelease?.tagName &&
+        !sameVersionLabel(latestRelease.tagName, currentVersion)
+      ) {
+        setManualReleaseAvailable(latestRelease);
+        return { ok: true, mode: "manual-tag-drift" };
+      }
+    } catch (fallbackError) {
+      log.warn("Fallback release drift check failed", fallbackError);
+    }
+
+    return { ok: true, mode: "up-to-date" };
   } catch (error) {
     log.error("Auto update check failed", error);
     return { ok: false, reason: "check-failed", message: error?.message || "Update kontrolu basarisiz" };
@@ -210,6 +332,36 @@ async function downloadUpdate() {
 
   if (!updateAvailableInfo) {
     return { ok: false, reason: "no-update" };
+  }
+
+  const manualMode = Boolean(updateAvailableInfo?.manual || manualReleaseInfo?.manual);
+  if (manualMode) {
+    const targetUrl =
+      updateAvailableInfo?.installerUrl ||
+      updateAvailableInfo?.htmlUrl ||
+      manualReleaseInfo?.installerUrl ||
+      manualReleaseInfo?.htmlUrl ||
+      "";
+
+    if (!targetUrl) {
+      return {
+        ok: false,
+        reason: "manual-link-missing",
+        message: "Release indirilebilir baglantisi bulunamadi.",
+      };
+    }
+
+    await shell.openExternal(targetUrl);
+    sendToRenderer("updates:event", {
+      type: "manual-download",
+      message: "Installer indirme sayfasi tarayicida acildi.",
+      info: {
+        ...updateAvailableInfo,
+        ...manualReleaseInfo,
+      },
+    });
+
+    return { ok: true, mode: "manual-download" };
   }
 
   if (updateDownloadInProgress) {
