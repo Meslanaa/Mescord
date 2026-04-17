@@ -2129,12 +2129,12 @@ export default function App() {
 
               {/* Chat Area */}
               <div className="chat-scroll" style={{ flex: 1, overflowY: "auto", display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '8px' }}>
-                {(hasDmConversation ? dmMessages : selectedChannel ? groupMessages : chatMessages).length === 0 ? (
+                {(hasDmConversation ? dmMessages : selectedChannel ? groupChannelMessages : chatMessages).length === 0 ? (
                   <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-dim)' }}>
                     <h3>Mesaj yok.</h3>
                   </div>
                 ) : (
-                  (hasDmConversation ? dmMessages : selectedChannel ? groupMessages : chatMessages).map((message) => {
+                  (hasDmConversation ? dmMessages : selectedChannel ? groupChannelMessages : chatMessages).map((message) => {
                     const fromName = message.fromName || message.fromUser?.displayName || message.fromUser?.username || "Guest";
                     const isMentioned = !hasDmConversation && hasTextMention(message.text, accountUser);
                     return (
