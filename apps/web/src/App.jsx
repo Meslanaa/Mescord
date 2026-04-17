@@ -2050,7 +2050,8 @@ export default function App() {
                 )}
               </div>
 
-              {canCreateChannel ? <form className="channel-create-form" onSubmit={handleCreateChannelSubmit}>
+              {canCreateChannel ? (
+                <form className="channel-create-form" onSubmit={handleCreateChannelSubmit}>
                   <input
                     type="text"
                     placeholder="Yeni kanal"
