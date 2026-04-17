@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import {
-  getRuntimeConnectionConfig,
-  isDesktopFileContext,
-  isLocalhostUrl,
-} from "../utils/runtimeConnection";
+import { getRuntimeConnectionConfig } from "../utils/runtimeConnection";
 
 const REACTION_TTL = 3000;
 const NOTICE_TTL = 3500;
@@ -659,13 +655,6 @@ export function useVoiceRoom() {
 
       if (!normalizedRoom) {
         setError("Oda adi bos olamaz.");
-        return false;
-      }
-
-      if (isDesktopFileContext() && isLocalhostUrl(signalingUrl)) {
-        setError(
-          "Desktop surumunde localhost ile odaya baglanamazsin. Baglanti ayarlarindan gercek sunucu URL'si gir.",
-        );
         return false;
       }
 

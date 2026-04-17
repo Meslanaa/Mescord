@@ -1,4 +1,5 @@
 const path = require("node:path");
+const os = require("node:os");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const log = require("electron-log");
 const { autoUpdater } = require("electron-updater");
@@ -188,6 +189,89 @@ function getRuntimeConnectionConfig() {
 }
 
 const runtimeConnectionConfig = getRuntimeConnectionConfig();
+
+function getPrimaryLanAddress() {
+  const all = os.networkInterfaces();
+  const candidates = [];
+
+  Object.values(all).forEach((entries) => {
+    (entries || []).forEach((entry) => {
+      if (!entry || entry.internal || entry.family !== "IPv4") {
+        return;
+      }
+
+      if (typeof entry.address !== "string" || !entry.address.trim()) {
+        return;
+      }
+
+      const address = entry.address.trim();
+      if (address.startsWith("169.254.")) {
+        return;
+      }
+
+      candidates.push(address);
+    });
+  });
+
+  const preferredPrivate = candidates.find((address) => {
+    if (address.startsWith("10.")) {
+      return true;
+    }
+
+    if (address.startsWith("192.168.")) {
+      return true;
+    }
+
+    const match = /^172\.(\d+)\./.exec(address);
+    if (!match) {
+      return false;
+    }
+
+    const second = Number(match[1]);
+    return second >= 16 && second <= 31;
+  });
+
+  return preferredPrivate || candidates[0] || "";
+}
+
+function inferServerPort() {
+  const fromRuntime = [runtimeConnectionConfig.apiBaseUrl, runtimeConnectionConfig.signalingUrl]
+    .map((candidate) => {
+      try {
+        return new URL(candidate).port;
+      } catch {
+        return "";
+      }
+    })
+    .find(Boolean);
+
+  if (fromRuntime) {
+    return Number(fromRuntime);
+  }
+
+  const fallback = Number(process.env.MESCORD_SERVER_PORT || process.env.PORT || 3001);
+  if (Number.isFinite(fallback) && fallback > 0) {
+    return fallback;
+  }
+
+  return 3001;
+}
+
+function buildConnectionPresets() {
+  const serverPort = inferServerPort();
+  const localhostUrl = `http://localhost:${serverPort}`;
+  const lanIp = getPrimaryLanAddress();
+  const lanUrl = lanIp ? `http://${lanIp}:${serverPort}` : "";
+
+  return {
+    serverPort,
+    localhostUrl,
+    lanIp,
+    lanUrl,
+  };
+}
+
+const connectionPresets = buildConnectionPresets();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -386,10 +470,20 @@ function setupIpc() {
     platform: process.platform,
     installDirectory: path.dirname(app.getPath("exe")),
     ...runtimeConnectionConfig,
+    connectionPresets,
+    suggestedServerPort: connectionPresets.serverPort,
+    suggestedLocalhostUrl: connectionPresets.localhostUrl,
+    suggestedLanIp: connectionPresets.lanIp,
+    suggestedLanUrl: connectionPresets.lanUrl,
   }));
 
   ipcMain.handle("desktop:connection-config", () => ({
     ...runtimeConnectionConfig,
+    connectionPresets,
+    suggestedServerPort: connectionPresets.serverPort,
+    suggestedLocalhostUrl: connectionPresets.localhostUrl,
+    suggestedLanIp: connectionPresets.lanIp,
+    suggestedLanUrl: connectionPresets.lanUrl,
   }));
 
   ipcMain.handle("desktop:check-updates", async () => checkForUpdates());

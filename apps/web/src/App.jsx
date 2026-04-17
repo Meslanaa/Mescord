@@ -1027,6 +1027,32 @@ export default function App() {
     await updatePresenceStatus(event.target.value);
   };
 
+  const handleApplyConnectionPreset = (preset) => {
+    if (preset === "localhost") {
+      const target = appInfo?.suggestedLocalhostUrl || "http://localhost:3001";
+      setConnectionApiInput(target);
+      setConnectionSignalingInput(target);
+      setConnectionNotice("Bu PC (localhost) secildi. URL Kaydet'e basarak aktif et.");
+      return;
+    }
+
+    if (preset === "lan") {
+      const target = appInfo?.suggestedLanUrl || "";
+      if (!target) {
+        setConnectionNotice(
+          "LAN IP bulunamadi. Ayni aga bagli oldugundan emin ol veya URL'yi elle gir.",
+        );
+        return;
+      }
+
+      setConnectionApiInput(target);
+      setConnectionSignalingInput(target);
+      setConnectionNotice(
+        `Bu PC (LAN) secildi: ${target}. Arkadasin da ayni URL'yi kullanarak baglanabilir.`,
+      );
+    }
+  };
+
   const handleSaveConnectionConfig = (event) => {
     event.preventDefault();
     const result = saveRuntimeConnectionConfig({
@@ -1172,6 +1198,29 @@ export default function App() {
               <h3>Baglanti Ayarlari</h3>
               <p>Kayit, giris ve odaya baglanma bu URL'ler uzerinden yapilir.</p>
 
+              {isDesktop ? (
+                <div className="connection-preset-row">
+                  <button
+                    type="button"
+                    className="soft-btn tiny-btn"
+                    onClick={() => {
+                      handleApplyConnectionPreset("localhost");
+                    }}
+                  >
+                    Bu PC (localhost)
+                  </button>
+                  <button
+                    type="button"
+                    className="soft-btn tiny-btn"
+                    onClick={() => {
+                      handleApplyConnectionPreset("lan");
+                    }}
+                  >
+                    Bu PC (LAN)
+                  </button>
+                </div>
+              ) : null}
+
               <form className="connection-config-form" onSubmit={handleSaveConnectionConfig}>
                 <label>
                   API URL
@@ -1199,6 +1248,12 @@ export default function App() {
                   URL Kaydet
                 </button>
               </form>
+
+              {isDesktop ? (
+                <small className="connection-hint">
+                  Arkadasin ayni Wi-Fi/LAN'da ise Bu PC (LAN) kullan. Farkli ag icin tunnel ya da port yonlendirme gerekir.
+                </small>
+              ) : null}
 
               {connectionNotice ? <small className="connection-note">{connectionNotice}</small> : null}
             </section>

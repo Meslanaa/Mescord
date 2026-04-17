@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  getRuntimeConnectionConfig,
-  isDesktopFileContext,
-  isLocalhostUrl,
-} from "../utils/runtimeConnection";
+import { getRuntimeConnectionConfig } from "../utils/runtimeConnection";
 
 const TOKEN_STORAGE_KEY = "mescord:auth-token-v1";
 
@@ -94,12 +90,6 @@ export function useAccountHub() {
 
       if (auth && !authToken) {
         throw new Error("Bu islem icin giris yapmalisin.");
-      }
-
-      if (isDesktopFileContext() && isLocalhostUrl(apiBaseUrl)) {
-        throw new Error(
-          "Desktop surumunde localhost ile kayit/giris calismaz. Baglanti ayarlarindan gercek sunucu URL'si gir.",
-        );
       }
 
       const headers = {
