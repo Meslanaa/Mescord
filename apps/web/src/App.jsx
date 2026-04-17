@@ -191,17 +191,17 @@ function initialsLabel(value) {
   }
 
   const chunks = source.split(/\s+/).slice(0, 2);
-
-  function createDefaultQuickTunnelState() {
-    return {
-      status: "idle",
-      publicUrl: "",
-      targetUrl: "",
-      message: "",
-      error: "",
-    };
-  }
   return chunks.map((chunk) => chunk[0]?.toUpperCase() || "").join("") || "MS";
+}
+
+function createDefaultQuickTunnelState() {
+  return {
+    status: "idle",
+    publicUrl: "",
+    targetUrl: "",
+    message: "",
+    error: "",
+  };
 }
 
 export default function App() {
