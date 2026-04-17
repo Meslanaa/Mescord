@@ -42,8 +42,8 @@ function createAllowedOrigins(rawValue) {
 const allowedOrigins = createAllowedOrigins(CLIENT_ORIGIN);
 
 function isOriginAllowed(origin) {
-  if (!origin || origin === "null") {
-    // Electron renderer requests from file:// origin are sent as "null".
+  if (!origin || origin === "null" || origin === "file://") {
+    // Electron renderer requests from file:// origin are sent as "null" or "file://".
     return true;
   }
 
@@ -94,7 +94,7 @@ const io = new Server(server, {
         return;
       }
 
-      callback(new Error(`Socket origin engellendi: ${origin || "unknown"}`));
+      console.log(`[SOCKET_CORS_REJECTED] origin=`, origin); callback(new Error(`Socket origin engellendi: ${origin || "unknown"}`));
     },
     methods: ["GET", "POST"],
   },
