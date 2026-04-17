@@ -7,7 +7,7 @@ import ReactionBurst from "./components/ReactionBurst";
 import { useAccountHub } from "./hooks/useAccountHub";
 import { useDesktopUpdater } from "./hooks/useDesktopUpdater";
 import { useVoiceRoom } from "./hooks/useVoiceRoom";
-import { saveRuntimeConnectionConfig } from "./utils/runtimeConnection";
+import { isLocalhostUrl, saveRuntimeConnectionConfig } from "./utils/runtimeConnection";
 
 const COLOR_SWATCHES = ["#00c6ff", "#ff7a18", "#8eff6b", "#f94144", "#ffd166", "#00d4a4"];
 const QUICK_REACTIONS = ["🔥", "👏", "😂", "🚀", "🎧", "💯"];
@@ -202,6 +202,19 @@ function createDefaultQuickTunnelState() {
     message: "",
     error: "",
   };
+}
+
+function getUrlHostLabel(url) {
+  const value = typeof url === "string" ? url.trim() : "";
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return new URL(value).host.toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 export default function App() {
@@ -773,8 +786,6 @@ export default function App() {
             setQuickTunnelBusy(false);
 
             if (nextState.status === "ready" && nextState.publicUrl) {
-              setConnectionApiInput(nextState.publicUrl);
-              setConnectionSignalingInput(nextState.publicUrl);
               setConnectionNotice(
                 `Cloudflare URL hazir: ${nextState.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
               );
@@ -829,8 +840,6 @@ export default function App() {
         }
 
         if (nextState.status === "ready" && nextState.publicUrl) {
-          setConnectionApiInput(nextState.publicUrl);
-          setConnectionSignalingInput(nextState.publicUrl);
           setConnectionNotice(
             `Cloudflare URL hazir: ${nextState.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
           );
@@ -1263,11 +1272,18 @@ export default function App() {
     }
 
     const shouldStop = quickTunnelRunning;
+    const localhostTarget = [
+      connectionApiInput,
+      connectionSignalingInput,
+      appInfo?.suggestedLocalhostUrl,
+      "http://localhost:3001",
+    ].find((candidate) => isLocalhostUrl(candidate || ""));
+
     const preferredTargetUrl =
-      connectionApiInput.trim() ||
-      connectionSignalingInput.trim() ||
+      localhostTarget ||
       appInfo?.suggestedLocalhostUrl ||
-      "";
+      connectionSignalingInput.trim() ||
+      "http://localhost:3001";
     setQuickTunnelBusy(true);
 
     try {
@@ -1293,8 +1309,6 @@ export default function App() {
       }
 
       if (result?.state?.publicUrl) {
-        setConnectionApiInput(result.state.publicUrl);
-        setConnectionSignalingInput(result.state.publicUrl);
         setConnectionNotice(
           `Cloudflare URL hazir: ${result.state.publicUrl}. Cloudflare URL preset'ini sec ve URL Kaydet'e bas.`,
         );
@@ -1310,6 +1324,22 @@ export default function App() {
 
   const handleSaveConnectionConfig = (event) => {
     event.preventDefault();
+
+    const apiHost = getUrlHostLabel(connectionApiInput);
+    const signalingHost = getUrlHostLabel(connectionSignalingInput);
+
+    if (apiHost && signalingHost && apiHost !== signalingHost) {
+      const mixedLocalhost =
+        isLocalhostUrl(connectionApiInput) || isLocalhostUrl(connectionSignalingInput);
+
+      setConnectionNotice(
+        mixedLocalhost
+          ? "Karisik ayar algilandi. API ve Signaling ayni host olmali: host PC icin ikisini de localhost, arkadasin icin ikisini de Cloudflare URL yap."
+          : "API URL ve Signaling URL ayni host olmali.",
+      );
+      return;
+    }
+
     const result = saveRuntimeConnectionConfig({
       apiBaseUrl: connectionApiInput,
       signalingUrl: connectionSignalingInput,
